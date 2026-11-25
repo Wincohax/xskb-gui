@@ -1,5 +1,5 @@
 //! Linux hidraw discovery, raw 64-byte HID report I/O, startup probe, and
-//! lighting config backup/restore (shared with `tools/xskb.py`).
+//! lighting config backup/restore (shared with the `xskb.py` Python prototype).
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -31,7 +31,7 @@ pub struct DeviceProbe {
     pub config: [u8; CONFIG_LEN],
 }
 
-/// Path to the stock lighting backup shared with `tools/xskb.py`.
+/// Path to the stock lighting backup shared with the `xskb.py` Python prototype.
 pub fn backup_path() -> Result<PathBuf> {
     let home = std::env::var_os("HOME").ok_or_else(|| anyhow!("HOME is not set"))?;
     Ok(PathBuf::from(home)
@@ -113,7 +113,7 @@ impl HidDevice {
             .open(&path)
             .with_context(|| format!("failed to open {}", path.display()))?;
         // Only one xskb writer at a time: a second one (e.g. a forgotten `xskb.py music`)
-        // would overwrite every frame we send. Advisory lock shared with tools/xskb.py.
+        // would overwrite every frame we send. Advisory lock shared with the xskb.py Python prototype.
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
             bail!(
                 "keyboard is busy: another program is driving {} ({})",

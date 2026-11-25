@@ -4,6 +4,9 @@ Linux desktop GUI for controlling the RGB lighting of XsEngine USB keyboards
 (tested against the Spark/AULA WIN 68 HE MAX, USB `1ca2:1901`, vendor HID usage
 page `0xFFA0`), built in Rust with standalone GPUI.
 
+The reverse-engineered HID protocol it speaks is documented in
+[docs/protocol.md](docs/protocol.md).
+
 ## GPUI source
 
 - **Crate / Repository:** [`gpui-ce/gpui-ce`](https://github.com/gpui-ce/gpui-ce)
@@ -30,11 +33,11 @@ page `0xFFA0`), built in Rust with standalone GPUI.
   brightness control.
 - **Music reactive mode:** captures PipeWire output via `pw-record` and runs a
   1024-point FFT (`rustfft`) into 15 log-spaced bands (40 Hz – 16 kHz) matching
-  `tools/xskb.py`'s auto-gain, attack/decay, and noise floor. Supports
+  the `xskb.py` Python prototype's auto-gain, attack/decay, and noise floor. Supports
   **Rainbow** and **Meter** styles, configurable FPS (default 40), and a
   sensitivity control.
 - **Safe stock lighting restore:** shares `~/.config/xskb/lighting-backup.bin`
-  with `tools/xskb.py` (never overwrites an existing backup), provides an
+  with the `xskb.py` Python prototype (never overwrites an existing backup), provides an
   **Off / Restore Stock** button, and restores stock lighting automatically on
   window close, `Ctrl+Q`, `SIGINT`, and `SIGTERM`.
 - **Non-blocking architecture:** all HID I/O and PipeWire audio processing run

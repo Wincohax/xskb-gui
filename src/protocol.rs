@@ -1,5 +1,5 @@
 //! Pure HID packet framing, checksum, reply parsing, and HID key labels for the
-//! XsEngine keyboard protocol (see `docs/protocol.md` and `tools/xskb.py`).
+//! XsEngine keyboard protocol (see `docs/protocol.md`).
 
 pub const VID: u16 = 0x1CA2;
 pub const PID: u16 = 0x1901;

@@ -1,4 +1,4 @@
-//! Audio capture (`pw-record`) and FFT spectrum mapping matching `tools/xskb.py`.
+//! Audio capture (`pw-record`) and FFT spectrum mapping matching the `xskb.py` Python prototype.
 
 use std::collections::HashMap;
 use std::f32::consts::PI;
@@ -39,7 +39,7 @@ impl MusicStyle {
 }
 
 /// Compute `num_bands` log-spaced `(start_bin, end_bin)` ranges from `40 Hz` to `16 kHz`.
-/// Matches `tools/xskb.py`:
+/// Matches the `xskb.py` Python prototype:
 /// `edges = [lo * (hi / lo) ** (i / num_bands) for i in 0..=num_bands]`
 /// `bins = [max(1, int(f * n / rate)) for f in edges]`
 /// `band i = [bins[i], max(bins[i] + 1, bins[i + 1]))`
@@ -98,7 +98,7 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
 }
 
 /// Stateful FFT spectrum analyzer matching the auto-gain, attack/decay, and noise
-/// floor behaviour of `tools/xskb.py`.
+/// floor behaviour of the `xskb.py` Python prototype.
 pub struct SpectrumAnalyzer {
     fft: Arc<dyn Fft<f32>>,
     window: Vec<f32>,
