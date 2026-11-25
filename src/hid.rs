@@ -78,6 +78,26 @@ pub fn find_hidraw() -> Result<PathBuf> {
     bail!("vendor hidraw interface (VID {VID:04x}:PID {PID:04x}, usage page 0x{VENDOR_USAGE_PAGE:04X}) not found")
 }
 
+/// Other processes that have `path` open, as "name (pid)" list, from /proc/*/fd.
+pub fn other_holders(path: &Path) -> String {
+    let me = std::process::id().to_string();
+    let mut found = Vec::new();
+    if let Ok(procs) = fs::read_dir("/proc") {
+        for p in procs.flatten() {
+            let pid = p.file_name().to_string_lossy().to_string();
+            if pid == me || !pid.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let Ok(fds) = fs::read_dir(p.path().join("fd")) else { continue };
+            if fds.flatten().any(|fd| fs::read_link(fd.path()).is_ok_and(|l| l == path)) {
+                let comm = fs::read_to_string(p.path().join("comm")).unwrap_or_default();
+                found.push(format!("{} ({pid})", comm.trim()));
+            }
+        }
+    }
+    if found.is_empty() { "none found".into() } else { found.join(", ") }
+}
+
 pub struct HidDevice {
     path: PathBuf,
     file: File,
@@ -92,6 +112,19 @@ impl HidDevice {
             .custom_flags(libc::O_NONBLOCK)
             .open(&path)
             .with_context(|| format!("failed to open {}", path.display()))?;
+        // Only one xskb writer at a time: a second one (e.g. a forgotten `xskb.py music`)
+        // would overwrite every frame we send. Advisory lock shared with tools/xskb.py.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            bail!(
+                "keyboard is busy: another program is driving {} ({})",
+                path.display(),
+                other_holders(&path)
+            );
+        }
+        let others = other_holders(&path);
+        if others != "none found" {
+            eprintln!("warning: {} is also open in: {others}", path.display());
+        }
         let mut dev = Self { path, file };
         dev.drain();
         Ok(dev)
