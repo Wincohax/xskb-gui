@@ -1,0 +1,13 @@
+[package]
+name = "xskb-gui"
+version = "0.1.0"
+edition = "2024"
+description = "Linux GPUI desktop controller for XsEngine USB RGB keyboards (Spark/AULA WIN 68 HE MAX)"
+
+[dependencies]
+anyhow = "1.0"
+ctrlc = { version = "3.4", features = ["termination"] }
+gpui = { package = "gpui-ce", version = "0.3.0" }
+gpui_platform = { package = "gpui_ce_platform", version = "0.3.0", features = ["wayland", "x11"] }
+libc = "0.2"
+rustfft = "6.2"
