@@ -106,6 +106,16 @@ cargo build --release
 
 `cargo test` runs the unit tests (packet building and audio band mapping) without a keyboard.
 
+### Building the AppImage
+
+To package the app as a single-file AppImage that runs on most Linux distributions, run the build script where the build dependencies above are installed (inside the distrobox on Bazzite):
+
+```bash
+packaging/build-appimage.sh      # → target/appimage/XSKB-x86_64.AppImage
+```
+
+The first run downloads linuxdeploy and appimagetool into `~/.cache/appimage-tools`. The AppImage uses the PipeWire tools already on your system for the music mode, so it doesn't bundle them.
+
 ## About
 
 This is an independent project, not affiliated with Spark, AULA or XsEngine. The keyboard's lighting
