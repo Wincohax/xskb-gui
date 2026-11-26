@@ -407,19 +407,19 @@ impl WorkerCtx {
             .map(|&idx| (idx, *color_map.get(&idx).unwrap_or(&[0, 0, 0])))
             .collect();
 
-        if let Some(dev) = self.dev.as_mut() {
-            if let Err(err) = dev.send_frame(&pairs, Duration::ZERO) {
-                self.music = None;
-                self.dev = None;
-                self.host_mode_active = false;
-                let mut st = self.state.lock().unwrap();
-                st.connected = false;
-                st.active_mode = ActiveMode::Stock;
-                st.error_message = Some(format!("HID stream error: {err}"));
-                st.status_message = "Lost connection to keyboard".into();
-                st.bump();
-                return;
-            }
+        if let Some(dev) = self.dev.as_mut()
+            && let Err(err) = dev.send_frame(&pairs, Duration::ZERO)
+        {
+            self.music = None;
+            self.dev = None;
+            self.host_mode_active = false;
+            let mut st = self.state.lock().unwrap();
+            st.connected = false;
+            st.active_mode = ActiveMode::Stock;
+            st.error_message = Some(format!("HID stream error: {err}"));
+            st.status_message = "Lost connection to keyboard".into();
+            st.bump();
+            return;
         }
 
         let mut st = self.state.lock().unwrap();
