@@ -1,88 +1,112 @@
-# xskb-gui
+<p align="center">
+  <img src="assets/icon.svg" width="96" height="96" alt="XSKB icon">
+</p>
 
-Linux desktop GUI for controlling the RGB lighting of XsEngine USB keyboards
-(tested against the Spark/AULA WIN 68 HE MAX, USB `1ca2:1901`, vendor HID usage
-page `0xFFA0`), built in Rust with standalone GPUI.
+<h1 align="center">XSKB Keyboard Lighting</h1>
 
-The reverse-engineered HID protocol it speaks is documented in
-[docs/protocol.md](docs/protocol.md).
+<p align="center">
+  Make your keyboard dance to your music on Linux.<br>
+  RGB lighting control for the <b>Spark / AULA WIN 68 HE MAX</b> and other XsEngine keyboards.
+</p>
 
-## GPUI source
+---
 
-- **Crate / Repository:** [`gpui-ce/gpui-ce`](https://github.com/gpui-ce/gpui-ce)
-  via crates.io releases `gpui-ce = "0.3.0"` and `gpui_ce_platform = "0.3.0"`
-  (published 2026-10-20 from `gpui-ce/gpui-ce`).
-- **Why this repo:** Zed Industries' official standalone repository
-  [`zed-industries/gpui`](https://github.com/zed-industries/gpui) currently
-  contains only a placeholder `README.md` (`"See you in a few weeks."`, commit
-  `8d31300b294f`, 2026-11-23) with no Rust code, and the `gpui` crate on
-  crates.io (`0.2.2`, 2025-10-22) still points at the `zed-industries/zed`
-  monorepo. `gpui-ce/gpui-ce` (GPUI Community Edition, 1.6k+ stars, actively
-  maintained standalone workspace) is the credible maintained standalone GPUI
-  repository available today.
+## What you can do
 
-## Features
+- **Music mode** — the keys light up in time with whatever is playing on your computer: songs, videos,
+  games. Choose a **Rainbow** spectrum or a **Meter** style, and adjust the sensitivity to taste.
+- **Solid colours** — one click on a preset (Orange, Cyan, Purple, Warm white…) or mix your own, and set
+  the brightness.
+- **Live preview** — see what's on your keyboard right inside the app.
+- **Keep it running in the background** — close the window and XSKB stays in your system tray, so the
+  music lighting keeps going. Right-click the tray icon to switch music mode on or off, or to quit.
+- **Your stock lighting is safe** — the first time it runs, XSKB saves a copy of your keyboard's original
+  lighting. Quitting the app (or pressing **Off / Restore Stock**) puts it back.
 
-- **Device status:** auto-discovers `/dev/hidrawN` via
-  `/sys/class/hidraw/*/device/{uevent,report_descriptor}` (VID `1ca2`, PID
-  `1901`, usage page `0xFFA0`), shows connection state, product name, firmware
-  version, app info string, and hidraw path.
-- **Live keyboard preview:** renders the 6x21 LED matrix returned by `0x2B` with
-  HID usage keycap labels and live per-key RGB colours.
-- **Solid colour mode:** colour presets, per-channel R/G/B controls, and a
-  brightness control.
-- **Music reactive mode:** captures PipeWire output via `pw-record` and runs a
-  1024-point FFT (`rustfft`) into 15 log-spaced bands (40 Hz – 16 kHz) matching
-  the `xskb.py` Python prototype's auto-gain, attack/decay, and noise floor. Supports
-  **Rainbow** and **Meter** styles, configurable FPS (default 40), and a
-  sensitivity control.
-- **Safe stock lighting restore:** shares `~/.config/xskb/lighting-backup.bin`
-  with the `xskb.py` Python prototype (never overwrites an existing backup), provides an
-  **Off / Restore Stock** button, and restores stock lighting automatically on
-  window close, `Ctrl+Q`, `SIGINT`, and `SIGTERM`.
-- **Non-blocking architecture:** all HID I/O and PipeWire audio processing run
-  on a dedicated background thread (`xskb-worker`).
+## Getting started
 
-## Building and running
+### 1. Let your user talk to the keyboard (one time)
 
-### Linux dependencies
+Linux only lets programs control USB devices that have been allowed. Paste this into a terminal once, then
+unplug and replug the keyboard:
 
-On Debian/Ubuntu:
-```sh
+```bash
+echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ca2", ATTRS{idProduct}=="1901", TAG+="uaccess"' \
+  | sudo tee /etc/udev/rules.d/70-xskb.rules
+sudo udevadm control --reload && sudo udevadm trigger
+```
+
+(The same rule is in [`udev/70-xskb.rules`](udev/70-xskb.rules) if you'd rather copy the file.)
+
+### 2. Run the app
+
+Download `XSKB-x86_64.AppImage` from the [Releases page](../../releases/latest), make it executable
+and open it:
+
+```bash
+chmod +x XSKB-x86_64.AppImage
+./XSKB-x86_64.AppImage
+```
+
+You can also double-click it in your file manager. Want it to start hidden in the tray when you log in?
+Add the AppImage to your desktop's autostart list with the `--background` option.
+
+Music mode listens to your computer's sound through PipeWire, which almost every current Linux desktop
+already uses. Nothing is recorded or saved.
+
+## Good to know
+
+- **One program at a time.** If something else is already controlling the lighting, XSKB will tell you
+  which program it is so you can close it.
+- **No tray?** On desktops without a system tray (for example GNOME without the AppIndicator extension),
+  closing the window quits the app and restores your stock lighting.
+- Your original lighting backup is kept at `~/.config/xskb/lighting-backup.bin`. XSKB never overwrites it.
+
+## Troubleshooting
+
+| Problem | Try this |
+|---|---|
+| The app says **Disconnected** | Make sure you did step 1, replug the keyboard, then press **Reconnect**. |
+| "keyboard is busy: another program is driving…" | Close the program named in the message, then press **Reconnect**. |
+| Music mode doesn't react | Check that sound is actually playing and that PipeWire is running. Try raising the sensitivity. |
+| "failed to spawn pw-record" | Install your distribution's PipeWire tools package (it provides `pw-record`). |
+| The tray icon doesn't show up | Your desktop may not have a system tray. On GNOME, install the *AppIndicator and KStatusNotifierItem Support* extension. |
+
+To check that the keyboard is detected without changing its lighting, run the app with `--probe`.
+
+## Building from source
+
+You need [Rust](https://rustup.rs) and a few development libraries for the window toolkit
+([GPUI-CE](https://github.com/gpui-ce/gpui-ce)).
+
+**Debian / Ubuntu**
+
+```bash
 sudo apt-get install -y build-essential pkg-config \
   libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev \
   libxcb-shape0-dev libxcb-xfixes0-dev libfontconfig-dev
 ```
 
-On Bazzite / immutable Fedora (no `rpm-ostree` or `sudo` layering needed):
-- Install Rust in your home directory via [rustup](https://rustup.rs).
-- Install the missing dev library via Homebrew (`brew install libxkbcommon`;
-  `fontconfig`, `libxcb`, and `libx11` are also available from Homebrew) **or**
-  build inside a Fedora `distrobox` / `toolbox` with `libxkbcommon-devel`,
-  `libxkbcommon-x11-devel`, `wayland-devel`, `libxcb-devel`, and
-  `fontconfig-devel`.
+**Fedora**
 
-Build with Homebrew libraries on Bazzite:
-```sh
-cd gui
-PKG_CONFIG_PATH="/home/linuxbrew/.linuxbrew/lib/pkgconfig:/home/linuxbrew/.linuxbrew/share/pkgconfig" \
-LIBRARY_PATH="/home/linuxbrew/.linuxbrew/lib" \
-cargo build --release
+```bash
+sudo dnf install gcc pkgconf-pkg-config libxkbcommon-devel libxkbcommon-x11-devel \
+  wayland-devel libxcb-devel fontconfig-devel
 ```
 
-Run the GUI:
-```sh
+On immutable systems such as Bazzite or Silverblue, run that inside a Fedora
+[distrobox](https://distrobox.it) and build there; the finished program runs on the host.
+
+Then:
+
+```bash
+cargo build --release
 ./target/release/xskb-gui
 ```
 
-Run a read-only hardware probe (does not change keyboard lighting):
-```sh
-./target/release/xskb-gui --probe
-```
+`cargo test` runs the unit tests (packet building and audio band mapping) without a keyboard.
 
-Run unit tests (packet/checksum builder + FFT band mapping):
-```sh
-PKG_CONFIG_PATH="/home/linuxbrew/.linuxbrew/lib/pkgconfig:/home/linuxbrew/.linuxbrew/share/pkgconfig" \
-LIBRARY_PATH="/home/linuxbrew/.linuxbrew/lib" \
-cargo test
-```
+## About
+
+This is an independent project, not affiliated with Spark, AULA or XsEngine. The keyboard's lighting
+protocol is documented in [`docs/protocol.md`](docs/protocol.md). Licensed under the GPL-3.0.
