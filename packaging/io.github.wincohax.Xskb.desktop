@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=XSKB Keyboard Lighting
+Comment=Control RGB and music-reactive lighting on XsEngine USB keyboards
+Exec=xskb-gui
+Icon=io.github.wincohax.Xskb
+Terminal=false
+Categories=Utility;Settings;HardwareSettings;Audio;
+Keywords=keyboard;rgb;lighting;music;audio;xskb;aula;
+StartupWMClass=io.github.wincohax.Xskb

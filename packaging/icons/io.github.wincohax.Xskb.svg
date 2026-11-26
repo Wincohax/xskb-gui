@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#C026D3"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="skirtGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#211A3A"/>
+      <stop offset="100%" stop-color="#0D0A19"/>
+    </linearGradient>
+    <linearGradient id="faceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2B214D"/>
+      <stop offset="55%" stop-color="#1B1433"/>
+      <stop offset="100%" stop-color="#130E26"/>
+    </linearGradient>
+    <linearGradient id="faceStroke" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#DDD6FE" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0.20"/>
+    </linearGradient>
+    <radialGradient id="eqGlow" cx="50%" cy="55%" r="48%">
+      <stop offset="0%" stop-color="#C026D3" stop-opacity="0.32"/>
+      <stop offset="60%" stop-color="#7C3AED" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bar1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="45%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="bar2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="40%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="bar3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F5D0FE"/>
+      <stop offset="38%" stop-color="#D946EF"/>
+      <stop offset="100%" stop-color="#7E22CE"/>
+    </linearGradient>
+    <linearGradient id="bar4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FBCFE8"/>
+      <stop offset="40%" stop-color="#E879F9"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+    <linearGradient id="bar5" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FBCFE8"/>
+      <stop offset="45%" stop-color="#EC4899"/>
+      <stop offset="100%" stop-color="#A21CAF"/>
+    </linearGradient>
+    <linearGradient id="underGlowBar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#D946EF"/>
+      <stop offset="100%" stop-color="#F472B6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer RGB-lit keycap rim -->
+  <rect x="14" y="14" width="228" height="228" rx="46" fill="url(#rimGrad)"/>
+
+  <!-- Keycap dark sculpted skirt -->
+  <rect x="24" y="24" width="208" height="208" rx="38" fill="url(#skirtGrad)"/>
+
+  <!-- Lower bevel RGB underglow bar -->
+  <rect x="52" y="205" width="152" height="10" rx="5" fill="url(#underGlowBar)" opacity="0.9"/>
+
+  <!-- Sculpted raised keycap top face -->
+  <rect x="38" y="34" width="180" height="158" rx="28" fill="url(#faceGrad)" stroke="url(#faceStroke)" stroke-width="2.5"/>
+
+  <!-- Soft ambient illumination behind spectrum bars -->
+  <ellipse cx="128" cy="122" rx="76" ry="56" fill="url(#eqGlow)"/>
+
+  <!-- 5-band music-reactive equalizer bars -->
+  <rect x="58" y="114" width="20" height="52" rx="10" fill="url(#bar1)"/>
+  <rect x="88" y="80" width="20" height="86" rx="10" fill="url(#bar2)"/>
+  <rect x="118" y="58" width="20" height="108" rx="10" fill="url(#bar3)"/>
+  <rect x="148" y="92" width="20" height="74" rx="10" fill="url(#bar4)"/>
+  <rect x="178" y="122" width="20" height="44" rx="10" fill="url(#bar5)"/>
+</svg>

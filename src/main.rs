@@ -1141,6 +1141,7 @@ fn main() {
                     title: Some("XSKB — Keyboard Lighting Controller".into()),
                     ..Default::default()
                 }),
+                app_id: Some("io.github.wincohax.Xskb".into()),
                 ..Default::default()
             },
             move |_window, cx| {
