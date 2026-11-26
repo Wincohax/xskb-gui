@@ -68,10 +68,10 @@ pub fn find_hidraw() -> Result<PathBuf> {
         let Ok(desc) = fs::read(&desc_path) else {
             continue;
         };
-        if desc.windows(3).any(|w| w == usage_page_bytes) {
-            if let Some(name) = sys_dev.file_name() {
-                return Ok(PathBuf::from("/dev").join(name));
-            }
+        if desc.windows(3).any(|w| w == usage_page_bytes)
+            && let Some(name) = sys_dev.file_name()
+        {
+            return Ok(PathBuf::from("/dev").join(name));
         }
     }
 

@@ -179,7 +179,7 @@ impl SpectrumAnalyzer {
         let effective_floor = NOISE_FLOOR / sensitivity;
         self.peak = (self.peak * PEAK_DECAY).max(max_band).max(effective_floor);
 
-        for (lvl, band) in self.levels.iter_mut().zip(bands.into_iter()) {
+        for (lvl, band) in self.levels.iter_mut().zip(bands) {
             let norm = ((band / self.peak) * sensitivity).clamp(0.0, 1.0);
             let v = norm.powf(GAMMA);
             if v > *lvl {
@@ -300,8 +300,8 @@ impl PwCapture {
         let usable = self.pending.len() - (self.pending.len() % 2);
         if usable > 0 {
             out.reserve(usable / 2);
-            for pair in self.pending[..usable].chunks_exact(2) {
-                out.push(i16::from_le_bytes([pair[0], pair[1]]));
+            for &pair in self.pending[..usable].as_chunks::<2>().0 {
+                out.push(i16::from_le_bytes(pair));
             }
             self.pending.drain(..usable);
         }
