@@ -1,19 +1,27 @@
 mod audio;
 mod hid;
 mod protocol;
+mod single_instance;
+mod tray;
 mod worker;
 
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::mpsc::{self, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gpui::{
-    App, Bounds, Context, IntoElement, KeyBinding, Render, SharedString, TitlebarOptions, Window,
-    WindowBounds, WindowOptions, actions, div, prelude::*, px, rgb, size,
+    App, AsyncApp, Bounds, Context, IntoElement, KeyBinding, QuitMode, Render, SharedString,
+    TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions, actions, div, prelude::*,
+    px, rgb, size,
 };
 use gpui_platform::application;
 
 use crate::audio::MusicStyle;
 use crate::protocol::{active_cols, active_rows, hid_key_label};
+use crate::single_instance::{AcquireOutcome, IpcCommand};
+use crate::tray::{MusicConfig, TrayAction, TrayController, TrayEvent};
 use crate::worker::{ActiveMode, SharedState, WorkerCmd, WorkerHandle};
 
 actions!(xskb, [Quit]);
@@ -63,8 +71,40 @@ fn key_width_units(usage: u8) -> f32 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct UiSettings {
+    solid_rgb: [u8; 3],
+    brightness: f32,
+    music_style: MusicStyle,
+    music_fps: u32,
+    music_sensitivity: f32,
+}
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            solid_rgb: [0, 225, 255],
+            brightness: 0.85,
+            music_style: MusicStyle::Rainbow,
+            music_fps: 40,
+            music_sensitivity: 1.0,
+        }
+    }
+}
+
+impl UiSettings {
+    fn music_config(&self) -> MusicConfig {
+        MusicConfig {
+            style: self.music_style,
+            fps: self.music_fps,
+            sensitivity: self.music_sensitivity,
+        }
+    }
+}
+
 struct XskbApp {
     worker: Arc<WorkerHandle>,
+    settings: Arc<Mutex<UiSettings>>,
     snapshot: SharedState,
     solid_rgb: [u8; 3],
     brightness: f32,
@@ -74,8 +114,13 @@ struct XskbApp {
 }
 
 impl XskbApp {
-    fn new(worker: Arc<WorkerHandle>, cx: &mut Context<Self>) -> Self {
+    fn new(
+        worker: Arc<WorkerHandle>,
+        settings: Arc<Mutex<UiSettings>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let snapshot = worker.snapshot();
+        let initial = *settings.lock().unwrap();
 
         // Poll worker state at ~40 Hz, notifying GPUI only when state changes.
         let worker_poll = Arc::clone(&worker);
@@ -100,13 +145,23 @@ impl XskbApp {
 
         Self {
             worker,
+            settings,
             snapshot,
-            solid_rgb: [0, 225, 255],
-            brightness: 0.85,
-            music_style: MusicStyle::Rainbow,
-            music_fps: 40,
-            music_sensitivity: 1.0,
+            solid_rgb: initial.solid_rgb,
+            brightness: initial.brightness,
+            music_style: initial.music_style,
+            music_fps: initial.music_fps,
+            music_sensitivity: initial.music_sensitivity,
         }
+    }
+
+    fn persist_settings(&self) {
+        let mut s = self.settings.lock().unwrap();
+        s.solid_rgb = self.solid_rgb;
+        s.brightness = self.brightness;
+        s.music_style = self.music_style;
+        s.music_fps = self.music_fps;
+        s.music_sensitivity = self.music_sensitivity;
     }
 
     fn send_solid(&self, burst: bool) {
@@ -446,6 +501,7 @@ impl XskbApp {
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.solid_rgb[channel_idx] = seg_val;
+                        this.persist_settings();
                         this.update_solid_if_active();
                         cx.notify();
                     })),
@@ -480,6 +536,7 @@ impl XskbApp {
                     .child("-")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.solid_rgb[channel_idx] = this.solid_rgb[channel_idx].saturating_sub(15);
+                        this.persist_settings();
                         this.update_solid_if_active();
                         cx.notify();
                     })),
@@ -498,6 +555,7 @@ impl XskbApp {
                     .child("+")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.solid_rgb[channel_idx] = this.solid_rgb[channel_idx].saturating_add(15);
+                        this.persist_settings();
                         this.update_solid_if_active();
                         cx.notify();
                     })),
@@ -541,6 +599,7 @@ impl XskbApp {
                     .child(preset.name)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.solid_rgb = swatch_rgb;
+                        this.persist_settings();
                         if this.snapshot.active_mode == ActiveMode::Solid {
                             this.send_solid(false);
                         } else {
@@ -569,6 +628,7 @@ impl XskbApp {
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.brightness = val;
+                        this.persist_settings();
                         this.update_solid_if_active();
                         cx.notify();
                     })),
@@ -655,6 +715,7 @@ impl XskbApp {
                             .child("-")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.brightness = (this.brightness - 0.1).clamp(0.0, 1.0);
+                                this.persist_settings();
                                 this.update_solid_if_active();
                                 cx.notify();
                             })),
@@ -673,6 +734,7 @@ impl XskbApp {
                             .child("+")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.brightness = (this.brightness + 0.1).clamp(0.0, 1.0);
+                                this.persist_settings();
                                 this.update_solid_if_active();
                                 cx.notify();
                             })),
@@ -732,6 +794,7 @@ impl XskbApp {
                     .child(format!("{fps}"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.music_fps = fps;
+                        this.persist_settings();
                         this.update_music_if_active();
                         cx.notify();
                     })),
@@ -755,6 +818,7 @@ impl XskbApp {
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.music_sensitivity = val;
+                        this.persist_settings();
                         this.update_music_if_active();
                         cx.notify();
                     })),
@@ -829,6 +893,7 @@ impl XskbApp {
                             .child("Rainbow")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_style = MusicStyle::Rainbow;
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -859,6 +924,7 @@ impl XskbApp {
                             .child("Meter")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_style = MusicStyle::Meter;
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -890,6 +956,7 @@ impl XskbApp {
                             .child("-")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_fps = this.music_fps.saturating_sub(5).max(10);
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -908,6 +975,7 @@ impl XskbApp {
                             .child("+")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_fps = (this.music_fps + 5).min(120);
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -946,6 +1014,7 @@ impl XskbApp {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_sensitivity =
                                     (this.music_sensitivity - 0.25).clamp(0.25, 3.0);
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -965,6 +1034,7 @@ impl XskbApp {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.music_sensitivity =
                                     (this.music_sensitivity + 0.25).clamp(0.25, 3.0);
+                                this.persist_settings();
                                 this.update_music_if_active();
                                 cx.notify();
                             })),
@@ -1089,8 +1159,100 @@ fn run_probe_cli() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct CliArgs {
+    probe: bool,
+    background: bool,
+    help: bool,
+}
+
+fn parse_cli_args<I, S>(args: I) -> CliArgs
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut parsed = CliArgs::default();
+    for arg in args {
+        match arg.as_ref() {
+            "--probe" => parsed.probe = true,
+            "--background" | "--hidden" => parsed.background = true,
+            "-h" | "--help" => parsed.help = true,
+            _ => {}
+        }
+    }
+    parsed
+}
+
+fn show_or_open_window(
+    cx: &mut App,
+    worker: &Arc<WorkerHandle>,
+    settings: &Arc<Mutex<UiSettings>>,
+    active_window: &mut Option<WindowHandle<XskbApp>>,
+    activation_token: Option<&str>,
+) {
+    if let Some(handle) = *active_window {
+        let activated = handle.update(cx, |_, window, _| {
+            if let Some(token) = activation_token {
+                if !window.activate_with_token(token) {
+                    window.activate();
+                }
+            } else {
+                window.activate();
+            }
+        });
+        if activated.is_ok() {
+            cx.activate(true);
+            return;
+        }
+        *active_window = None;
+    }
+
+    let bounds = Bounds::centered(None, size(px(1040.0), px(720.0)), cx);
+    let worker_view = Arc::clone(worker);
+    let settings_view = Arc::clone(settings);
+    let token_owned = activation_token.map(str::to_owned);
+
+    match cx.open_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitlebarOptions {
+                title: Some("XSKB — Keyboard Lighting Controller".into()),
+                ..Default::default()
+            }),
+            app_id: Some(tray::APP_ID.into()),
+            ..Default::default()
+        },
+        move |window, cx| {
+            if let Some(token) = token_owned.as_deref() {
+                window.activate_with_token(token);
+            }
+            cx.new(move |cx| XskbApp::new(worker_view, settings_view, cx))
+        },
+    ) {
+        Ok(handle) => {
+            *active_window = Some(handle);
+            cx.activate(true);
+        }
+        Err(err) => {
+            eprintln!("failed to open XSKB window: {err:#}");
+        }
+    }
+}
+
 fn main() {
-    if std::env::args().any(|a| a == "--probe") {
+    let cli = parse_cli_args(std::env::args().skip(1));
+    if cli.help {
+        println!(
+            "Usage: xskb-gui [--probe | --background | --hidden]\n\n\
+             Options:\n  \
+               --probe        Run read-only hardware probe and exit\n  \
+               --background   Start minimized to system tray without opening a window\n  \
+               --hidden       Alias for --background"
+        );
+        return;
+    }
+
+    if cli.probe {
         if let Err(err) = run_probe_cli() {
             eprintln!("probe error: {err:#}");
             std::process::exit(1);
@@ -1098,12 +1260,66 @@ fn main() {
         return;
     }
 
+    let (event_tx, event_rx) = mpsc::channel::<TrayEvent>();
+
+    // Single-instance enforcement: if another instance is already running, tell it to
+    // surface its window (or ping when launched with --background) and exit cleanly.
+    let ipc_cmd = if cli.background {
+        IpcCommand::Ping
+    } else {
+        IpcCommand::Show {
+            activation_token: std::env::var("XDG_ACTIVATION_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty()),
+        }
+    };
+    let ipc_tx = event_tx.clone();
+    let instance_guard = match single_instance::acquire_or_notify(
+        single_instance::default_socket_path(),
+        &ipc_cmd,
+        move |cmd| {
+            if let IpcCommand::Show { activation_token } = cmd {
+                let _ = ipc_tx.send(TrayEvent::ShowWindow { activation_token });
+            }
+        },
+    ) {
+        Ok(AcquireOutcome::ActivatedExisting) => return,
+        Ok(AcquireOutcome::Primary(guard)) => Some(guard),
+        Err(err) => {
+            eprintln!("single-instance socket unavailable ({err:#}); continuing");
+            None
+        }
+    };
+
     let worker = WorkerHandle::spawn();
+    let settings = Arc::new(Mutex::new(UiSettings::default()));
+
+    let initial_snapshot = worker.snapshot();
+    let tray: Option<Arc<TrayController>> = match TrayController::spawn(
+        event_tx,
+        initial_snapshot.active_mode,
+        initial_snapshot.connected,
+    ) {
+        Ok(controller) => Some(Arc::new(controller)),
+        Err(err) => {
+            eprintln!("system tray unavailable ({err}); closing the window will quit");
+            None
+        }
+    };
+    let tray_available = tray.is_some();
 
     // Restore stock lighting cleanly on SIGINT or SIGTERM.
     {
         let worker_sig = Arc::clone(&worker);
+        let tray_sig = tray.clone();
+        let socket_sig = instance_guard.as_ref().map(|g| g.socket_path());
         let _ = ctrlc::set_handler(move || {
+            if let Some(t) = tray_sig.as_ref() {
+                t.shutdown();
+            }
+            if let Some(path) = socket_sig.as_ref() {
+                let _ = std::fs::remove_file(path.as_path());
+            }
             worker_sig.shutdown_and_wait();
             std::process::exit(0);
         });
@@ -1111,48 +1327,199 @@ fn main() {
 
     let worker_close = Arc::clone(&worker);
     let worker_quit = Arc::clone(&worker);
-    let worker_view = Arc::clone(&worker);
+    let worker_open = Arc::clone(&worker);
+    let worker_pump = Arc::clone(&worker);
+    let settings_open = Arc::clone(&settings);
+    let settings_pump = Arc::clone(&settings);
+    let tray_close = tray.clone();
+    let tray_quit = tray.clone();
+    let tray_pump = tray.clone();
+    let start_background = cli.background && tray_available;
+    if cli.background && !tray_available {
+        eprintln!("--background requested without an active system tray host; opening window");
+    }
 
-    application().run(move |cx: &mut App| {
-        cx.on_action(|_: &Quit, cx| cx.quit());
-        cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
+    let initial_quit_mode = if tray_available {
+        QuitMode::Explicit
+    } else {
+        QuitMode::LastWindowClosed
+    };
 
-        cx.on_window_closed(move |cx, _| {
-            if cx.windows().is_empty() {
-                worker_close.shutdown_and_wait();
-                cx.quit();
+    application()
+        .with_quit_mode(initial_quit_mode)
+        .run(move |cx: &mut App| {
+            cx.set_app_identity(tray::APP_ID, tray::APP_TITLE);
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
+
+            let active_window: Rc<RefCell<Option<WindowHandle<XskbApp>>>> =
+                Rc::new(RefCell::new(None));
+
+            let active_window_close = Rc::clone(&active_window);
+            cx.on_window_closed(move |cx, closed_id| {
+                {
+                    let mut slot = active_window_close.borrow_mut();
+                    if slot.is_some_and(|h| h.window_id() == closed_id) {
+                        *slot = None;
+                    }
+                }
+                let tray_online = tray_close.as_ref().is_some_and(|t| t.is_online());
+                if !tray_online && cx.windows().is_empty() {
+                    worker_close.shutdown_and_wait();
+                    cx.quit();
+                }
+            })
+            .detach();
+
+            cx.on_app_quit(move |_cx| {
+                let w = Arc::clone(&worker_quit);
+                let t = tray_quit.clone();
+                async move {
+                    if let Some(tray) = t {
+                        tray.shutdown();
+                    }
+                    w.shutdown_and_wait();
+                }
+            })
+            .detach();
+
+            if !start_background {
+                let mut slot = active_window.borrow_mut();
+                show_or_open_window(cx, &worker_open, &settings_open, &mut slot, None);
             }
-        })
-        .detach();
 
-        cx.on_app_quit(move |_cx| {
-            let w = Arc::clone(&worker_quit);
-            async move {
-                w.shutdown_and_wait();
-            }
-        })
-        .detach();
+            // Drain tray & single-instance IPC events and keep the tray menu/tooltip synced.
+            let active_window_pump = Rc::clone(&active_window);
+            let mut last_synced = (initial_snapshot.active_mode, initial_snapshot.connected);
+            cx.spawn(async move |cx: &mut AsyncApp| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(50))
+                        .await;
 
-        let bounds = Bounds::centered(None, size(px(1040.0), px(720.0)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: Some("XSKB — Keyboard Lighting Controller".into()),
-                    ..Default::default()
-                }),
-                app_id: Some("io.github.wincohax.Xskb".into()),
-                ..Default::default()
-            },
-            move |_window, cx| {
-                let w = Arc::clone(&worker_view);
-                cx.new(move |cx| XskbApp::new(w, cx))
-            },
-        )
-        .expect("failed to open XSKB window");
+                    let mut should_quit = false;
+                    loop {
+                        match event_rx.try_recv() {
+                            Ok(event) => {
+                                let snap = worker_pump.snapshot();
+                                let music_cfg = settings_pump.lock().unwrap().music_config();
+                                match tray::map_tray_event(event, snap.active_mode, music_cfg) {
+                                    TrayAction::ShowWindow { activation_token } => {
+                                        let w = Arc::clone(&worker_pump);
+                                        let s = Arc::clone(&settings_pump);
+                                        let slot = Rc::clone(&active_window_pump);
+                                        cx.update(|cx| {
+                                            let mut guard = slot.borrow_mut();
+                                            show_or_open_window(
+                                                cx,
+                                                &w,
+                                                &s,
+                                                &mut guard,
+                                                activation_token.as_deref(),
+                                            );
+                                        });
+                                    }
+                                    TrayAction::Worker(cmd) => {
+                                        worker_pump.send(cmd);
+                                    }
+                                    TrayAction::Quit => {
+                                        should_quit = true;
+                                        cx.update(|cx| cx.quit());
+                                        break;
+                                    }
+                                    TrayAction::TrayOffline => {
+                                        let w = Arc::clone(&worker_pump);
+                                        let s = Arc::clone(&settings_pump);
+                                        let slot = Rc::clone(&active_window_pump);
+                                        cx.update(|cx| {
+                                            cx.set_quit_mode(QuitMode::LastWindowClosed);
+                                            if cx.windows().is_empty() {
+                                                let mut guard = slot.borrow_mut();
+                                                show_or_open_window(cx, &w, &s, &mut guard, None);
+                                            }
+                                        });
+                                    }
+                                    TrayAction::TrayOnline => {
+                                        cx.update(|cx| {
+                                            cx.set_quit_mode(QuitMode::Explicit);
+                                        });
+                                    }
+                                }
+                            }
+                            Err(TryRecvError::Empty) => break,
+                            Err(TryRecvError::Disconnected) => break,
+                        }
+                    }
 
-        cx.activate(true);
-    });
+                    if should_quit {
+                        break;
+                    }
 
+                    if let Some(tray) = tray_pump.as_ref()
+                        && tray.is_online()
+                    {
+                        let snap = worker_pump.snapshot();
+                        let key = (snap.active_mode, snap.connected);
+                        if key != last_synced {
+                            last_synced = key;
+                            let tray_bg = Arc::clone(tray);
+                            cx.background_executor()
+                                .spawn(async move {
+                                    tray_bg.sync_state(key.0, key.1);
+                                })
+                                .detach();
+                        }
+                    }
+                }
+            })
+            .detach();
+        });
+
+    if let Some(t) = tray.as_ref() {
+        t.shutdown();
+    }
     worker.shutdown_and_wait();
+    drop(instance_guard);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_cli_flags_handles_background_hidden_probe_and_help() {
+        assert_eq!(parse_cli_args(Vec::<&str>::new()), CliArgs::default());
+        assert_eq!(
+            parse_cli_args(["--probe"]),
+            CliArgs {
+                probe: true,
+                background: false,
+                help: false,
+            }
+        );
+        assert_eq!(
+            parse_cli_args(["--background"]),
+            CliArgs {
+                probe: false,
+                background: true,
+                help: false,
+            }
+        );
+        assert_eq!(
+            parse_cli_args(["--hidden"]),
+            CliArgs {
+                probe: false,
+                background: true,
+                help: false,
+            }
+        );
+        assert_eq!(
+            parse_cli_args(["-h"]),
+            CliArgs {
+                probe: false,
+                background: false,
+                help: true,
+            }
+        );
+    }
 }

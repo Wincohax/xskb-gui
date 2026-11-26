@@ -95,7 +95,7 @@ impl SharedState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WorkerCmd {
     Reconnect,
     SetSolid {
